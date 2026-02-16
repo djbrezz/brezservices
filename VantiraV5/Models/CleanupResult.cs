@@ -1,5 +1,8 @@
 namespace VantiraV5.Models;
 
+/// <summary>
+/// Captures cleanup execution details for user-facing reporting.
+/// </summary>
 internal sealed class CleanupResult
 {
     public required long BytesFreed { get; init; }

@@ -1,5 +1,8 @@
 namespace VantiraV5.Models;
 
+/// <summary>
+/// Represents a startup application entry discovered from registry or startup folders.
+/// </summary>
 internal sealed class StartupItem
 {
     public required string Name { get; init; }

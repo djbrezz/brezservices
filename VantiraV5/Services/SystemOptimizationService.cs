@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using VantiraV5.Models;
@@ -10,115 +11,206 @@ internal sealed class SystemOptimizationService
 {
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
+    /// <summary>
+    /// Reads CPU and RAM usage values to build a quick performance snapshot.
+    /// </summary>
+    public async Task<SystemSnapshot> GetSystemSnapshotAsync()
+    {
+        double cpu = await GetCpuUsageAsync();
+        (double used, double total, double usagePercent) = await GetRamUsageAsync();
+
+        return new SystemSnapshot
+        {
+            CpuUsagePercent = cpu,
+            RamUsedGb = used,
+            RamTotalGb = total,
+            RamUsagePercent = usagePercent
+        };
+    }
+
+    /// <summary>
+    /// Gets current RAM usage using GlobalMemoryStatusEx for stable native Windows metrics.
+    /// </summary>
     public async Task<(double UsedGb, double TotalGb, double UsagePercent)> GetRamUsageAsync()
     {
         return await Task.Run(() =>
         {
-            MEMORYSTATUSEX statex = new() { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
-            if (!GlobalMemoryStatusEx(ref statex))
+            MEMORYSTATUSEX state = new() { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+            if (!GlobalMemoryStatusEx(ref state))
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             }
 
-            double total = statex.ullTotalPhys / 1024d / 1024d / 1024d;
-            double available = statex.ullAvailPhys / 1024d / 1024d / 1024d;
+            double total = state.ullTotalPhys / 1024d / 1024d / 1024d;
+            double available = state.ullAvailPhys / 1024d / 1024d / 1024d;
             double used = total - available;
-            double percent = total <= 0 ? 0 : used / total * 100;
-            return (used, total, percent);
+            return (used, total, total <= 0 ? 0 : used / total * 100);
         });
     }
 
+    /// <summary>
+    /// Measures CPU usage using a short PerformanceCounter sample interval.
+    /// </summary>
+    public async Task<double> GetCpuUsageAsync()
+    {
+        return await Task.Run(async () =>
+        {
+            using PerformanceCounter counter = new("Processor", "% Processor Time", "_Total");
+            _ = counter.NextValue();
+            await Task.Delay(600);
+            return Math.Round(counter.NextValue(), 1);
+        });
+    }
+
+    /// <summary>
+    /// Performs harmless memory optimization simulation to mimic optimizer behavior.
+    /// </summary>
+    public async Task<string> OptimizeMemoryAsync()
+    {
+        return await Task.Run(() =>
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            return "Memory compaction simulation complete. GC cycle executed successfully.";
+        });
+    }
+
+    /// <summary>
+    /// Cleans common temporary directories and reports detailed metrics.
+    /// </summary>
     public async Task<CleanupResult> ClearTempFilesAsync()
     {
         return await Task.Run(() =>
         {
+            string windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             string[] tempPaths =
             [
                 Path.GetTempPath(),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp")
+                string.IsNullOrWhiteSpace(windowsDir) ? string.Empty : Path.Combine(windowsDir, "Temp")
             ];
 
-            long deletedBytes = 0;
-            int deletedFiles = 0;
-            int deletedDirectories = 0;
+            long freed = 0;
+            int filesDeleted = 0;
+            int directoriesDeleted = 0;
             int failures = 0;
 
-            foreach (string tempPath in tempPaths.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (string tempPath in tempPaths.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (!Directory.Exists(tempPath))
                 {
                     continue;
                 }
 
-                IEnumerable<string> files;
                 try
                 {
-                    files = Directory.EnumerateFiles(tempPath, "*", SearchOption.AllDirectories);
+                    foreach (string file in Directory.EnumerateFiles(tempPath, "*", SearchOption.AllDirectories))
+                    {
+                        try
+                        {
+                            FileInfo info = new(file);
+                            freed += info.Length;
+                            info.Attributes = FileAttributes.Normal;
+                            info.Delete();
+                            filesDeleted++;
+                        }
+                        catch
+                        {
+                            failures++;
+                        }
+                    }
+
+                    foreach (string folder in Directory.EnumerateDirectories(tempPath, "*", SearchOption.AllDirectories)
+                                 .OrderByDescending(d => d.Length))
+                    {
+                        try
+                        {
+                            Directory.Delete(folder, false);
+                            directoriesDeleted++;
+                        }
+                        catch
+                        {
+                            failures++;
+                        }
+                    }
                 }
                 catch
                 {
                     failures++;
-                    continue;
-                }
-
-                foreach (string file in files)
-                {
-                    try
-                    {
-                        FileInfo info = new(file);
-                        deletedBytes += info.Length;
-                        info.Attributes = FileAttributes.Normal;
-                        info.Delete();
-                        deletedFiles++;
-                    }
-                    catch
-                    {
-                        failures++;
-                    }
-                }
-
-                IEnumerable<string> directories;
-                try
-                {
-                    directories = Directory.EnumerateDirectories(tempPath, "*", SearchOption.AllDirectories)
-                        .OrderByDescending(d => d.Length);
-                }
-                catch
-                {
-                    failures++;
-                    continue;
-                }
-
-                foreach (string dir in directories)
-                {
-                    try
-                    {
-                        Directory.Delete(dir, false);
-                        deletedDirectories++;
-                    }
-                    catch
-                    {
-                        failures++;
-                    }
                 }
             }
 
             return new CleanupResult
             {
-                BytesFreed = deletedBytes,
-                FilesDeleted = deletedFiles,
-                DirectoriesDeleted = deletedDirectories,
+                BytesFreed = freed,
+                FilesDeleted = filesDeleted,
+                DirectoriesDeleted = directoriesDeleted,
                 Failures = failures
             };
         });
     }
 
+    /// <summary>
+    /// Deletes common log-like temporary files while preserving system integrity.
+    /// </summary>
+    public async Task<int> ClearCommonLogsAsync()
+    {
+        return await Task.Run(() =>
+        {
+            int removed = 0;
+            string tempPath = Path.GetTempPath();
+            if (!Directory.Exists(tempPath))
+            {
+                return removed;
+            }
+
+            foreach (string pattern in new[] { "*.log", "*.etl", "*.tmp" })
+            {
+                IEnumerable<string> candidates;
+                try
+                {
+                    candidates = Directory.EnumerateFiles(tempPath, pattern, SearchOption.AllDirectories);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (string file in candidates)
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        removed++;
+                    }
+                    catch
+                    {
+                        // Non-fatal.
+                    }
+                }
+            }
+
+            return removed;
+        });
+    }
+
+    /// <summary>
+    /// Empties recycle bin using Windows shell API.
+    /// </summary>
+    public async Task<bool> ClearRecycleBinAsync()
+    {
+        return await Task.Run(() => SHEmptyRecycleBin(IntPtr.Zero, null,
+            RecycleFlags.SHERB_NOCONFIRMATION | RecycleFlags.SHERB_NOPROGRESSUI | RecycleFlags.SHERB_NOSOUND) == 0);
+    }
+
+    /// <summary>
+    /// Discovers startup applications from registry and startup folders.
+    /// </summary>
     public async Task<IReadOnlyList<StartupItem>> GetStartupAppsAsync()
     {
         return await Task.Run(() =>
         {
-            var items = new List<StartupItem>();
-
+            List<StartupItem> items = [];
             CollectRegistryStartupItems(Registry.CurrentUser, "HKCU", items);
             CollectRegistryStartupItems(Registry.LocalMachine, "HKLM", items);
             CollectStartupFolderItems(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Startup Folder (User)", items);
@@ -131,13 +223,16 @@ internal sealed class SystemOptimizationService
         });
     }
 
+    /// <summary>
+    /// Disables a startup app by removing registry value or moving shortcut to disabled folder.
+    /// </summary>
     public async Task<bool> DisableStartupAppAsync(StartupItem item)
     {
         return await Task.Run(() =>
         {
             if (item.Source.StartsWith("Registry", StringComparison.OrdinalIgnoreCase))
             {
-                RegistryKey? root = item.Location.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase)
+                RegistryKey root = item.Location.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase)
                     ? Registry.LocalMachine
                     : Registry.CurrentUser;
 
@@ -157,10 +252,8 @@ internal sealed class SystemOptimizationService
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "VantiraV5",
                     "DisabledStartup");
-
                 Directory.CreateDirectory(disabledFolder);
-                string destination = Path.Combine(disabledFolder, Path.GetFileName(item.Command));
-                File.Move(item.Command, destination, overwrite: true);
+                File.Move(item.Command, Path.Combine(disabledFolder, Path.GetFileName(item.Command)), overwrite: true);
                 return true;
             }
 
@@ -168,6 +261,9 @@ internal sealed class SystemOptimizationService
         });
     }
 
+    /// <summary>
+    /// Executes network tuning commands and returns command logs.
+    /// </summary>
     public async Task<string> OptimizeNetworkAsync()
     {
         string[] commands =
@@ -177,7 +273,7 @@ internal sealed class SystemOptimizationService
             "netsh int ip reset"
         ];
 
-        var logs = new List<string>();
+        List<string> logs = [];
         foreach (string command in commands)
         {
             logs.Add(await RunShellCommandAsync(command));
@@ -186,14 +282,74 @@ internal sealed class SystemOptimizationService
         return string.Join(Environment.NewLine + Environment.NewLine, logs);
     }
 
+    /// <summary>
+    /// Samples network throughput and latency (ping) for live diagnostics.
+    /// </summary>
+    public async Task<NetworkStats> GetNetworkStatsAsync()
+    {
+        NetworkInterface? active = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+            .OrderByDescending(n => n.Speed)
+            .FirstOrDefault();
+
+        if (active is null)
+        {
+            return new NetworkStats { DownloadMbps = 0, UploadMbps = 0, PingMs = -1 };
+        }
+
+        IPv4InterfaceStatistics start = active.GetIPv4Statistics();
+        await Task.Delay(1000);
+        IPv4InterfaceStatistics end = active.GetIPv4Statistics();
+
+        double downBps = Math.Max(0, end.BytesReceived - start.BytesReceived);
+        double upBps = Math.Max(0, end.BytesSent - start.BytesSent);
+
+        long ping = -1;
+        try
+        {
+            using Ping pinger = new();
+            PingReply reply = await pinger.SendPingAsync("8.8.8.8", 1500);
+            if (reply.Status == IPStatus.Success)
+            {
+                ping = reply.RoundtripTime;
+            }
+        }
+        catch
+        {
+            ping = -1;
+        }
+
+        return new NetworkStats
+        {
+            DownloadMbps = Math.Round(downBps * 8 / 1_000_000, 2),
+            UploadMbps = Math.Round(upBps * 8 / 1_000_000, 2),
+            PingMs = ping
+        };
+    }
+
+    /// <summary>
+    /// Enables gaming power profile (ultimate if available, else high performance).
+    /// </summary>
     public async Task<string> EnableGamingModeAsync()
     {
-        string query = await RunShellCommandAsync("powercfg /list");
-        string preferredScheme = query.Contains("Ultimate Performance", StringComparison.OrdinalIgnoreCase)
+        string list = await RunShellCommandAsync("powercfg /list");
+        string scheme = list.Contains("Ultimate Performance", StringComparison.OrdinalIgnoreCase)
             ? "e9a42b02-d5df-448d-aa00-03f14749eb61"
             : "SCHEME_MIN";
 
-        return await RunShellCommandAsync($"powercfg /setactive {preferredScheme}");
+        return await RunShellCommandAsync($"powercfg /setactive {scheme}");
+    }
+
+    /// <summary>
+    /// Simulates an FPS booster with harmless process-priority style behavior.
+    /// </summary>
+    public async Task<string> SimulateFpsBoostAsync()
+    {
+        return await Task.Run(() =>
+        {
+            Thread.Sleep(400);
+            return "FPS Booster Simulation: Background scheduler tuned, visual latency profile optimized (simulated).";
+        });
     }
 
     private static void CollectRegistryStartupItems(RegistryKey root, string rootName, ICollection<StartupItem> items)
@@ -206,13 +362,12 @@ internal sealed class SystemOptimizationService
 
         foreach (string name in key.GetValueNames())
         {
-            string command = key.GetValue(name)?.ToString() ?? string.Empty;
             items.Add(new StartupItem
             {
                 Name = name,
                 Source = "Registry",
                 Location = $"{rootName}\\{StartupRegistryPath}",
-                Command = command
+                Command = key.GetValue(name)?.ToString() ?? string.Empty
             });
         }
     }
@@ -254,18 +409,29 @@ internal sealed class SystemOptimizationService
         string error = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
 
-        string log = $"> {command}{Environment.NewLine}{output.Trim()}";
+        string text = $"> {command}{Environment.NewLine}{output.Trim()}";
         if (!string.IsNullOrWhiteSpace(error))
         {
-            log += $"{Environment.NewLine}{error.Trim()}";
+            text += $"{Environment.NewLine}{error.Trim()}";
         }
 
-        return $"{log}{Environment.NewLine}Exit code: {process.ExitCode}";
+        return $"{text}{Environment.NewLine}Exit code: {process.ExitCode}";
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+    [DllImport("Shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHEmptyRecycleBin(IntPtr hwnd, string? pszRootPath, RecycleFlags dwFlags);
+
+    [Flags]
+    private enum RecycleFlags : uint
+    {
+        SHERB_NOCONFIRMATION = 0x00000001,
+        SHERB_NOPROGRESSUI = 0x00000002,
+        SHERB_NOSOUND = 0x00000004
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct MEMORYSTATUSEX

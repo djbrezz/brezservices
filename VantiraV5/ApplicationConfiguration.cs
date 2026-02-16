@@ -6,5 +6,6 @@ internal static class ApplicationConfiguration
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
     }
 }
