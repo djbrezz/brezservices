@@ -28,41 +28,88 @@ internal sealed class SystemOptimizationService
         });
     }
 
-    public async Task<long> ClearTempFilesAsync()
+    public async Task<CleanupResult> ClearTempFilesAsync()
     {
         return await Task.Run(() =>
         {
-            string tempPath = Path.GetTempPath();
+            string[] tempPaths =
+            [
+                Path.GetTempPath(),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp")
+            ];
+
             long deletedBytes = 0;
+            int deletedFiles = 0;
+            int deletedDirectories = 0;
+            int failures = 0;
 
-            foreach (string file in Directory.EnumerateFiles(tempPath, "*", SearchOption.AllDirectories))
+            foreach (string tempPath in tempPaths.Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                if (!Directory.Exists(tempPath))
+                {
+                    continue;
+                }
+
+                IEnumerable<string> files;
                 try
                 {
-                    FileInfo info = new(file);
-                    deletedBytes += info.Length;
-                    info.Attributes = FileAttributes.Normal;
-                    info.Delete();
+                    files = Directory.EnumerateFiles(tempPath, "*", SearchOption.AllDirectories);
                 }
                 catch
                 {
-                    // Skip locked/unavailable files.
+                    failures++;
+                    continue;
                 }
-            }
 
-            foreach (string dir in Directory.EnumerateDirectories(tempPath, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
-            {
+                foreach (string file in files)
+                {
+                    try
+                    {
+                        FileInfo info = new(file);
+                        deletedBytes += info.Length;
+                        info.Attributes = FileAttributes.Normal;
+                        info.Delete();
+                        deletedFiles++;
+                    }
+                    catch
+                    {
+                        failures++;
+                    }
+                }
+
+                IEnumerable<string> directories;
                 try
                 {
-                    Directory.Delete(dir, false);
+                    directories = Directory.EnumerateDirectories(tempPath, "*", SearchOption.AllDirectories)
+                        .OrderByDescending(d => d.Length);
                 }
                 catch
                 {
-                    // Skip non-empty or locked directories.
+                    failures++;
+                    continue;
+                }
+
+                foreach (string dir in directories)
+                {
+                    try
+                    {
+                        Directory.Delete(dir, false);
+                        deletedDirectories++;
+                    }
+                    catch
+                    {
+                        failures++;
+                    }
                 }
             }
 
-            return deletedBytes;
+            return new CleanupResult
+            {
+                BytesFreed = deletedBytes,
+                FilesDeleted = deletedFiles,
+                DirectoriesDeleted = deletedDirectories,
+                Failures = failures
+            };
         });
     }
 
@@ -72,38 +119,15 @@ internal sealed class SystemOptimizationService
         {
             var items = new List<StartupItem>();
 
-            using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(StartupRegistryPath, writable: false))
-            {
-                if (key is not null)
-                {
-                    foreach (string name in key.GetValueNames())
-                    {
-                        string command = key.GetValue(name)?.ToString() ?? string.Empty;
-                        items.Add(new StartupItem
-                        {
-                            Name = name,
-                            Source = "Registry",
-                            Command = command
-                        });
-                    }
-                }
-            }
+            CollectRegistryStartupItems(Registry.CurrentUser, "HKCU", items);
+            CollectRegistryStartupItems(Registry.LocalMachine, "HKLM", items);
+            CollectStartupFolderItems(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Startup Folder (User)", items);
+            CollectStartupFolderItems(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup), "Startup Folder (All Users)", items);
 
-            string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            if (Directory.Exists(startupFolder))
-            {
-                foreach (string file in Directory.EnumerateFiles(startupFolder))
-                {
-                    items.Add(new StartupItem
-                    {
-                        Name = Path.GetFileNameWithoutExtension(file),
-                        Source = "Startup Folder",
-                        Command = file
-                    });
-                }
-            }
-
-            return (IReadOnlyList<StartupItem>)items.OrderBy(i => i.Name).ToList();
+            return (IReadOnlyList<StartupItem>)items
+                .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(i => i.Source, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         });
     }
 
@@ -111,9 +135,13 @@ internal sealed class SystemOptimizationService
     {
         return await Task.Run(() =>
         {
-            if (item.Source == "Registry")
+            if (item.Source.StartsWith("Registry", StringComparison.OrdinalIgnoreCase))
             {
-                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(StartupRegistryPath, writable: true);
+                RegistryKey? root = item.Location.StartsWith("HKLM", StringComparison.OrdinalIgnoreCase)
+                    ? Registry.LocalMachine
+                    : Registry.CurrentUser;
+
+                using RegistryKey? key = root.OpenSubKey(StartupRegistryPath, writable: true);
                 if (key is null)
                 {
                     return false;
@@ -123,12 +151,13 @@ internal sealed class SystemOptimizationService
                 return true;
             }
 
-            if (item.Source == "Startup Folder" && File.Exists(item.Command))
+            if (item.Source.StartsWith("Startup Folder", StringComparison.OrdinalIgnoreCase) && File.Exists(item.Command))
             {
                 string disabledFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "VantiraV5",
                     "DisabledStartup");
+
                 Directory.CreateDirectory(disabledFolder);
                 string destination = Path.Combine(disabledFolder, Path.GetFileName(item.Command));
                 File.Move(item.Command, destination, overwrite: true);
@@ -142,10 +171,11 @@ internal sealed class SystemOptimizationService
     public async Task<string> OptimizeNetworkAsync()
     {
         string[] commands =
-        {
+        [
             "ipconfig /flushdns",
-            "netsh winsock reset"
-        };
+            "netsh winsock reset",
+            "netsh int ip reset"
+        ];
 
         var logs = new List<string>();
         foreach (string command in commands)
@@ -158,7 +188,52 @@ internal sealed class SystemOptimizationService
 
     public async Task<string> EnableGamingModeAsync()
     {
-        return await RunShellCommandAsync("powercfg /setactive SCHEME_MIN");
+        string query = await RunShellCommandAsync("powercfg /list");
+        string preferredScheme = query.Contains("Ultimate Performance", StringComparison.OrdinalIgnoreCase)
+            ? "e9a42b02-d5df-448d-aa00-03f14749eb61"
+            : "SCHEME_MIN";
+
+        return await RunShellCommandAsync($"powercfg /setactive {preferredScheme}");
+    }
+
+    private static void CollectRegistryStartupItems(RegistryKey root, string rootName, ICollection<StartupItem> items)
+    {
+        using RegistryKey? key = root.OpenSubKey(StartupRegistryPath, writable: false);
+        if (key is null)
+        {
+            return;
+        }
+
+        foreach (string name in key.GetValueNames())
+        {
+            string command = key.GetValue(name)?.ToString() ?? string.Empty;
+            items.Add(new StartupItem
+            {
+                Name = name,
+                Source = "Registry",
+                Location = $"{rootName}\\{StartupRegistryPath}",
+                Command = command
+            });
+        }
+    }
+
+    private static void CollectStartupFolderItems(string startupFolder, string source, ICollection<StartupItem> items)
+    {
+        if (!Directory.Exists(startupFolder))
+        {
+            return;
+        }
+
+        foreach (string file in Directory.EnumerateFiles(startupFolder))
+        {
+            items.Add(new StartupItem
+            {
+                Name = Path.GetFileNameWithoutExtension(file),
+                Source = source,
+                Location = startupFolder,
+                Command = file
+            });
+        }
     }
 
     private static async Task<string> RunShellCommandAsync(string command)
@@ -179,12 +254,13 @@ internal sealed class SystemOptimizationService
         string error = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
 
+        string log = $"> {command}{Environment.NewLine}{output.Trim()}";
         if (!string.IsNullOrWhiteSpace(error))
         {
-            return $"> {command}{Environment.NewLine}{error.Trim()}";
+            log += $"{Environment.NewLine}{error.Trim()}";
         }
 
-        return $"> {command}{Environment.NewLine}{output.Trim()}";
+        return $"{log}{Environment.NewLine}Exit code: {process.ExitCode}";
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]

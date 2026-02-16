@@ -151,8 +151,9 @@ internal sealed class MainForm : Form
         _startupList.Location = new Point(24, 266);
         _startupList.Size = new Size(720, 280);
         _startupList.Columns.Add("Name", 220);
-        _startupList.Columns.Add("Source", 120);
-        _startupList.Columns.Add("Command", 360);
+        _startupList.Columns.Add("Source", 170);
+        _startupList.Columns.Add("Location", 220);
+        _startupList.Columns.Add("Command", 260);
 
         Button disableButton = CreateActionButton("Disable Selected Startup App");
         disableButton.Location = new Point(24, 562);
@@ -237,9 +238,9 @@ internal sealed class MainForm : Form
         {
             await RunActionAsync("Clearing temporary files...", async () =>
             {
-                long bytes = await _optimizer.ClearTempFilesAsync();
-                double mb = bytes / 1024d / 1024d;
-                _cleanupLabel.Text = $"Freed {mb:N2} MB from temporary files.";
+                var result = await _optimizer.ClearTempFilesAsync();
+                double mb = result.BytesFreed / 1024d / 1024d;
+                _cleanupLabel.Text = $"Freed {mb:N2} MB | Files: {result.FilesDeleted} | Folders: {result.DirectoriesDeleted} | Skipped: {result.Failures}";
             });
         };
 
@@ -337,8 +338,27 @@ internal sealed class MainForm : Form
         }
 
         _statusLabel.Text = $"Viewing {section}";
+
+        _ = section switch
+        {
+            "Performance" => WarmPerformanceSectionAsync(),
+            _ => Task.CompletedTask
+        };
     }
 
+
+    private async Task WarmPerformanceSectionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_ramLabel.Text))
+        {
+            await RefreshPerformanceAsync();
+        }
+
+        if (_startupList.Items.Count == 0)
+        {
+            await RefreshStartupAppsAsync();
+        }
+    }
     private async Task RefreshPerformanceAsync()
     {
         await RunActionAsync("Checking RAM usage...", async () =>
@@ -360,6 +380,7 @@ internal sealed class MainForm : Form
         {
             ListViewItem item = new(app.Name);
             item.SubItems.Add(app.Source);
+            item.SubItems.Add(app.Location);
             item.SubItems.Add(app.Command);
             item.Tag = app;
             _startupList.Items.Add(item);
