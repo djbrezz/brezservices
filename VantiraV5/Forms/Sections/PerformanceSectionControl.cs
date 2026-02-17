@@ -12,6 +12,7 @@ internal sealed class PerformanceSectionControl : SectionControlBase
     private readonly ProgressBar _cpuBar = new();
     private readonly ProgressBar _ramBar = new();
     private readonly ListView _startupList = new();
+    private readonly TextBox _insightsBox = new();
     private int _optimizeTapCount;
 
     public override string SectionKey => "Performance";
@@ -21,11 +22,11 @@ internal sealed class PerformanceSectionControl : SectionControlBase
         _service = service;
         Controls.Add(MakeHeader("Performance"));
 
-        MaterialButton refresh = new() { Text = "Refresh CPU/RAM", Location = new Point(22, 70) };
+        MaterialButton refresh = new() { Text = "Refresh CPU / RAM", Location = new Point(22, 70), Width = 220 };
         refresh.Click += async (_, _) => await RefreshStatsAsync();
-        RegisterTooltip(refresh, "Reads current CPU and RAM usage.");
+        RegisterTooltip(refresh, "Fetch live system performance snapshot.");
 
-        MaterialButton optimizeMemory = new() { Text = "Optimize Memory", Location = new Point(286, 70) };
+        MaterialButton optimizeMemory = new() { Text = "Optimize Memory", Location = new Point(252, 70), Width = 220 };
         optimizeMemory.Click += async (_, _) =>
         {
             _optimizeTapCount++;
@@ -38,69 +39,122 @@ internal sealed class PerformanceSectionControl : SectionControlBase
                 _optimizeTapCount = 0;
             }
         };
+        RegisterTooltip(optimizeMemory, "Runs safe memory compaction simulation.");
 
-        MaterialButton clearTemp = new() { Text = "Quick Temp Cleanup", Location = new Point(550, 70) };
+        MaterialButton aiScan = new() { Text = "Run AI Health Scan", Location = new Point(482, 70), Width = 220 };
+        aiScan.Click += async (_, _) => _insightsBox.Text = await _service.BuildHealthSummaryAsync();
+        RegisterTooltip(aiScan, "Generates a readable system-health summary.");
+
+        MaterialButton clearTemp = new() { Text = "Quick Temp Cleanup", Location = new Point(712, 70), Width = 220 };
         clearTemp.Click += async (_, _) =>
         {
             CleanupResult cleanup = await _service.ClearTempFilesAsync();
             double mb = cleanup.BytesFreed / 1024d / 1024d;
-            MessageBox.Show($"Freed {mb:N2} MB\nFiles: {cleanup.FilesDeleted}\nFolders: {cleanup.DirectoriesDeleted}\nSkipped: {cleanup.Failures}",
-                "Quick Cleanup",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            _insightsBox.Text = $"Cleanup Result\n• Freed: {mb:N2} MB\n• Files: {cleanup.FilesDeleted}\n• Folders: {cleanup.DirectoriesDeleted}\n• Skipped: {cleanup.Failures}";
         };
 
         _statsLabel.Location = new Point(22, 126);
         _statsLabel.ForeColor = ThemePalette.Text;
         _statsLabel.AutoSize = true;
 
-        _cpuBar.Location = new Point(22, 158);
-        _cpuBar.Width = 380;
+        _cpuBar.Location = new Point(22, 154);
+        _cpuBar.Width = 450;
         _cpuBar.Style = ProgressBarStyle.Continuous;
+        _cpuBar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
-        _ramBar.Location = new Point(410, 158);
-        _ramBar.Width = 380;
+        _ramBar.Location = new Point(482, 154);
+        _ramBar.Width = 450;
         _ramBar.Style = ProgressBarStyle.Continuous;
+        _ramBar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
-        Label startupHeader = new()
+        GroupBox startupGroup = new()
         {
             Text = "Startup Applications",
-            Location = new Point(22, 205),
             ForeColor = ThemePalette.Text,
-            AutoSize = true,
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold, GraphicsUnit.Point)
+            BackColor = ThemePalette.Background,
+            Location = new Point(22, 196),
+            Size = new Size(620, 430),
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left
         };
 
-        _startupList.Location = new Point(22, 236);
-        _startupList.Size = new Size(900, 300);
+        _startupList.Dock = DockStyle.Fill;
         _startupList.BorderStyle = BorderStyle.None;
         _startupList.BackColor = ThemePalette.Surface;
         _startupList.ForeColor = ThemePalette.Text;
         _startupList.FullRowSelect = true;
         _startupList.View = View.Details;
-        _startupList.Columns.Add("Name", 180);
-        _startupList.Columns.Add("Source", 180);
-        _startupList.Columns.Add("Location", 250);
-        _startupList.Columns.Add("Command", 280);
+        _startupList.Columns.Add("Name", 130);
+        _startupList.Columns.Add("Source", 140);
+        _startupList.Columns.Add("Location", 160);
+        _startupList.Columns.Add("Command", 170);
+        startupGroup.Controls.Add(_startupList);
 
-        MaterialButton disable = new() { Text = "Disable Selected Startup App", Location = new Point(22, 548), Width = 300 };
+        MaterialButton disable = new()
+        {
+            Text = "Disable Selected Startup App",
+            Width = 320,
+            Location = new Point(22, 634),
+            Anchor = AnchorStyles.Left | AnchorStyles.Bottom
+        };
         disable.Click += async (_, _) => await DisableSelectedStartupAsync();
+
+        GroupBox insightsGroup = new()
+        {
+            Text = "AI Insights",
+            ForeColor = ThemePalette.Text,
+            BackColor = ThemePalette.Background,
+            Location = new Point(652, 196),
+            Size = new Size(280, 468),
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        };
+
+        _insightsBox.Dock = DockStyle.Fill;
+        _insightsBox.Multiline = true;
+        _insightsBox.ReadOnly = true;
+        _insightsBox.ScrollBars = ScrollBars.Vertical;
+        _insightsBox.BackColor = ThemePalette.Surface;
+        _insightsBox.ForeColor = ThemePalette.Text;
+        _insightsBox.BorderStyle = BorderStyle.None;
+        _insightsBox.Text = "Run AI Health Scan to generate optimization insights.";
+        insightsGroup.Controls.Add(_insightsBox);
 
         Controls.Add(refresh);
         Controls.Add(optimizeMemory);
+        Controls.Add(aiScan);
         Controls.Add(clearTemp);
         Controls.Add(_statsLabel);
         Controls.Add(_cpuBar);
         Controls.Add(_ramBar);
-        Controls.Add(startupHeader);
-        Controls.Add(_startupList);
+        Controls.Add(startupGroup);
         Controls.Add(disable);
+        Controls.Add(insightsGroup);
+
+        Resize += (_, _) => UpdateResponsiveLayout();
+        UpdateResponsiveLayout();
     }
 
     public override async Task OnActivatedAsync()
     {
         await RefreshStatsAsync();
         await RefreshStartupAppsAsync();
+    }
+
+    /// <summary>
+    /// Updates control placement to keep layout clean on resize.
+    /// </summary>
+    private void UpdateResponsiveLayout()
+    {
+        int panelWidth = ClientSize.Width - 44;
+        int rightColumnWidth = Math.Max(260, panelWidth - 630);
+
+        foreach (Control control in Controls)
+        {
+            if (control is GroupBox group && group.Text == "AI Insights")
+            {
+                group.Left = 652;
+                group.Width = rightColumnWidth;
+            }
+        }
     }
 
     /// <summary>

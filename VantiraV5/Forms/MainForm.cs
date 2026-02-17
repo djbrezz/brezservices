@@ -12,6 +12,7 @@ internal sealed class MainForm : Form
     private readonly List<SidebarNavButton> _navButtons = [];
     private readonly Panel _contentHost = new();
     private readonly Label _status = new();
+    private readonly Label _subtitle = new();
     private readonly Timer _petTimer = new();
     private readonly PictureBox _pet = new();
 
@@ -49,7 +50,7 @@ internal sealed class MainForm : Form
         Panel sidebar = new()
         {
             Dock = DockStyle.Left,
-            Width = 240,
+            Width = 250,
             BackColor = ThemePalette.Surface,
             Padding = new Padding(14)
         };
@@ -58,11 +59,16 @@ internal sealed class MainForm : Form
         {
             Text = "Vantira V5",
             Dock = DockStyle.Top,
-            Height = 52,
-            Font = new Font("Segoe UI", 16F, FontStyle.Bold, GraphicsUnit.Point),
+            Height = 50,
+            Font = new Font("Segoe UI", 17F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = ThemePalette.Text,
             TextAlign = ContentAlignment.MiddleLeft
         };
+
+        _subtitle.Text = "Professional System Optimizer";
+        _subtitle.Dock = DockStyle.Top;
+        _subtitle.Height = 24;
+        _subtitle.ForeColor = ThemePalette.MutedText;
 
         FlowLayoutPanel navFlow = new()
         {
@@ -87,6 +93,7 @@ internal sealed class MainForm : Form
 
         sidebar.Controls.Add(navFlow);
         sidebar.Controls.Add(_status);
+        sidebar.Controls.Add(_subtitle);
         sidebar.Controls.Add(title);
 
         _contentHost.Dock = DockStyle.Fill;
@@ -195,13 +202,13 @@ internal sealed class MainForm : Form
         {
             FormBorderStyle = FormBorderStyle.None,
             StartPosition = FormStartPosition.Manual,
-            Size = new Size(320, 80),
+            Size = new Size(360, 84),
             BackColor = Color.FromArgb(47, 51, 63),
             TopMost = true,
             ShowInTaskbar = false
         };
 
-        Point p = PointToScreen(new Point(Width - 380, 70));
+        Point p = PointToScreen(new Point(Width - 420, 80));
         popup.Location = p;
 
         Label label = new()
@@ -210,7 +217,7 @@ internal sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = Color.FromArgb(122, 243, 110),
             Font = new Font("Consolas", 10F, FontStyle.Bold, GraphicsUnit.Point),
-            Text = "[MINECRAFT WARNING] Creeper optimized your FPS!"
+            Text = "[SYSTEM EVENT] Creeper-level optimization achieved."
         };
 
         popup.Controls.Add(label);
@@ -218,7 +225,7 @@ internal sealed class MainForm : Form
 
         _ = Task.Run(async () =>
         {
-            await Task.Delay(1800);
+            await Task.Delay(1700);
             if (!popup.IsDisposed)
             {
                 popup.Invoke(() => popup.Close());
@@ -233,7 +240,7 @@ internal sealed class MainForm : Form
 
         _ = Task.Run(async () =>
         {
-            await Task.Delay(300);
+            await Task.Delay(280);
             if (!IsDisposed)
             {
                 Invoke(() =>
@@ -269,5 +276,17 @@ internal sealed class MainForm : Form
         }
 
         _pet.Location = new Point(x, y);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _petTimer.Stop();
+            _petTimer.Dispose();
+            _pet.Image?.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }

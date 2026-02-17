@@ -18,7 +18,7 @@ internal sealed class CleanupSectionControl : SectionControlBase
         _service = service;
         Controls.Add(MakeHeader("Cleanup"));
 
-        MaterialButton clearTemp = new() { Text = "Clear Temp Files", Location = new Point(22, 70) };
+        MaterialButton clearTemp = new() { Text = "Clear Temp Files", Location = new Point(22, 70), Width = 210 };
         clearTemp.Click += async (_, _) =>
         {
             _tapCount++;
@@ -33,24 +33,24 @@ internal sealed class CleanupSectionControl : SectionControlBase
             }
         };
 
-        MaterialButton recycle = new() { Text = "Empty Recycle Bin", Location = new Point(286, 70) };
+        MaterialButton recycle = new() { Text = "Empty Recycle Bin", Location = new Point(244, 70), Width = 210 };
         recycle.Click += async (_, _) =>
         {
             bool ok = await _service.ClearRecycleBinAsync();
-            _status.Text = ok ? "Recycle bin cleaned." : "Could not clear recycle bin (permission or policy).";
+            _status.Text = ok ? "Recycle Bin cleaned successfully." : "Could not clear Recycle Bin (permission or policy).";
         };
 
-        MaterialButton logs = new() { Text = "Clear Temp Logs", Location = new Point(550, 70) };
+        MaterialButton logs = new() { Text = "Clear Temp Logs", Location = new Point(466, 70), Width = 210 };
         logs.Click += async (_, _) =>
         {
             int removed = await _service.ClearCommonLogsAsync();
-            _status.Text = $"Removed {removed} log/tmp trace files.";
+            _status.Text = $"Removed {removed} trace/log files from temporary locations.";
         };
 
         _status.Location = new Point(22, 130);
         _status.AutoSize = true;
         _status.ForeColor = ThemePalette.Text;
-        _status.MaximumSize = new Size(900, 0);
+        _status.MaximumSize = new Size(920, 0);
         _status.Text = "Run a cleanup action to see details.";
 
         Controls.Add(clearTemp);

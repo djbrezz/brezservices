@@ -19,7 +19,7 @@ internal sealed class GamingSectionControl : SectionControlBase
 
         Label desc = new()
         {
-            Text = "Gaming mode applies high-performance profile and optional harmless FPS booster simulation.",
+            Text = "Gaming mode applies high-performance power settings and optional FPS booster simulation.",
             Location = new Point(22, 76),
             AutoSize = true,
             ForeColor = ThemePalette.MutedText

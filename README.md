@@ -1,18 +1,16 @@
-# Vantira V5 (Modernized)
+# Vantira V5
 
-Vantira V5 is a modern Windows optimizer-style desktop application built with **WinForms** on **.NET 8**.
+Vantira V5 is a polished Windows optimization suite built with **WinForms** on **.NET 8**.
+It focuses on practical utilities, a professional dark UI, and safe optimization workflows.
 
-## Highlights
+## Key Features
 
-- Sleek dark theme with rounded corners and material-style buttons
-- Sidebar navigation with dynamically loaded sections:
-  - Performance
-  - Gaming
-  - Network
-  - Cleanup
-  - About
-- Smooth UX touches: hover states, status updates, subtle transitions, tooltips
-- Chaotic Easter eggs triggered by repeated button clicks
+- Modern dark interface with rounded corners and material-style controls
+- Dynamic sidebar navigation with dedicated modules
+- Async background actions for responsive UX
+- Real diagnostics for performance and network visibility
+- Safe cleanup workflows for temp files, logs, and recycle bin
+- Hidden Easter eggs (optional, harmless, and user-triggered)
 
 ## Project Structure
 
@@ -46,54 +44,52 @@ VantiraV5/
   VantiraV5.csproj
 ```
 
-## Functional Modules
+## Modules
 
 ### Performance
-- Reads CPU and RAM usage
-- Performs memory optimization simulation via GC compaction cycle
-- Quick temp cleanup
-- Startup apps listing + disable selected entries
+- CPU + RAM live snapshot
+- Memory optimization simulation
+- Startup app discovery and disable flow
+- AI-style health summary generation
 
 ### Network
-- Measures estimated upload/download throughput
-- Ping test to `8.8.8.8`
-- Runs network repair commands (`flushdns`, `winsock reset`, `int ip reset`)
+- Throughput estimate (download/upload)
+- Ping/latency measurement
+- Network stack repair commands (`flushdns`, `winsock reset`, `ip reset`)
 
 ### Cleanup
-- Clears temp files
-- Empties recycle bin
-- Clears common temporary logs (`.log`, `.etl`, `.tmp`)
+- Temp file cleanup with detailed results
+- Recycle Bin cleanup
+- Temporary log cleanup (`.log`, `.etl`, `.tmp`)
 
 ### Gaming
-- Enables high-performance (or ultimate-performance) power profile
-- Includes harmless FPS booster simulation
+- High/ultimate performance power profile activation
+- Safe FPS booster simulation mode
+
+### About
+- Product summary and module overview
 
 ## Easter Eggs (Chaos Mode)
-Click the same optimization action button **3+ times** in these sections:
-- Performance optimize memory
-- Network optimize
-- Cleanup temp cleanup
-- Gaming power mode
+Trigger by clicking specific optimization buttons **3+ times**.
 
-What happens:
-- Mini desktop pet appears and bounces around the app
-- Random Minecraft-style warning popup appears
-- Instant visual “optimization flash” effect
+Effects:
+- A mini desktop pet that bounces around the app window
+- Retro-style system event popup notifications
+- A short “instant optimization” visual flash
 
-All Easter eggs are harmless and do not apply destructive system changes.
+All effects are cosmetic and non-destructive.
 
-## Build and Run
+## Build & Run
 
-1. Install .NET 8 SDK on Windows.
-2. Build:
-   ```bash
-   dotnet build VantiraV5.sln
-   ```
-3. Run:
-   ```bash
-   dotnet run --project VantiraV5/VantiraV5.csproj
-   ```
+> Requires Windows + .NET 8 SDK.
 
-## Notes
-- Some operations may require elevated privileges depending on system policy.
-- This project is designed as an optimizer utility demo with safe defaults.
+```bash
+dotnet build VantiraV5.sln
+dotnet run --project VantiraV5/VantiraV5.csproj
+```
+
+## Release Notes
+
+- Designed for safe operation with defensive error handling
+- Some actions may require elevated permissions depending on endpoint policies
+- Recommended to code-sign binaries before public distribution

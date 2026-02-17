@@ -53,13 +53,10 @@ internal sealed class SystemOptimizationService
     /// </summary>
     public async Task<double> GetCpuUsageAsync()
     {
-        return await Task.Run(async () =>
-        {
-            using PerformanceCounter counter = new("Processor", "% Processor Time", "_Total");
-            _ = counter.NextValue();
-            await Task.Delay(600);
-            return Math.Round(counter.NextValue(), 1);
-        });
+        using PerformanceCounter counter = new("Processor", "% Processor Time", "_Total");
+        _ = counter.NextValue();
+        await Task.Delay(650);
+        return Math.Round(counter.NextValue(), 1);
     }
 
     /// <summary>
@@ -74,6 +71,46 @@ internal sealed class SystemOptimizationService
             GC.Collect();
             return "Memory compaction simulation complete. GC cycle executed successfully.";
         });
+    }
+
+    /// <summary>
+    /// Produces a quick, readable health summary suitable for an optimizer dashboard.
+    /// </summary>
+    public async Task<string> BuildHealthSummaryAsync()
+    {
+        SystemSnapshot snapshot = await GetSystemSnapshotAsync();
+        IReadOnlyList<StartupItem> startup = await GetStartupAppsAsync();
+        NetworkStats network = await GetNetworkStatsAsync();
+
+        string cpuState = snapshot.CpuUsagePercent switch
+        {
+            < 45 => "Excellent",
+            < 75 => "Moderate",
+            _ => "High"
+        };
+
+        string ramState = snapshot.RamUsagePercent switch
+        {
+            < 55 => "Healthy",
+            < 80 => "Busy",
+            _ => "Constrained"
+        };
+
+        string pingState = network.PingMs switch
+        {
+            < 0 => "Unavailable",
+            < 60 => "Low latency",
+            < 120 => "Normal",
+            _ => "High latency"
+        };
+
+        return $"AI Health Scan\n" +
+               $"• CPU Load: {snapshot.CpuUsagePercent:N1}% ({cpuState})\n" +
+               $"• RAM Load: {snapshot.RamUsagePercent:N1}% ({ramState})\n" +
+               $"• Startup Entries: {startup.Count}\n" +
+               $"• Network: Down {network.DownloadMbps:N2} Mbps / Up {network.UploadMbps:N2} Mbps\n" +
+               $"• Latency: {(network.PingMs < 0 ? "N/A" : network.PingMs + " ms")} ({pingState})\n\n" +
+               $"Recommendation: {(snapshot.RamUsagePercent > 80 || snapshot.CpuUsagePercent > 80 ? "Run cleanup + close heavy background apps." : "System is in good shape for daily use.")}";
     }
 
     /// <summary>
@@ -345,11 +382,8 @@ internal sealed class SystemOptimizationService
     /// </summary>
     public async Task<string> SimulateFpsBoostAsync()
     {
-        return await Task.Run(() =>
-        {
-            Thread.Sleep(400);
-            return "FPS Booster Simulation: Background scheduler tuned, visual latency profile optimized (simulated).";
-        });
+        await Task.Delay(450);
+        return "FPS Booster Simulation: background scheduler tuned and frame pacing profile optimized (simulated).";
     }
 
     private static void CollectRegistryStartupItems(RegistryKey root, string rootName, ICollection<StartupItem> items)

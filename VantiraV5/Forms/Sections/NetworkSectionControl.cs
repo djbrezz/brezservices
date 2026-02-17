@@ -19,10 +19,11 @@ internal sealed class NetworkSectionControl : SectionControlBase
         _service = service;
         Controls.Add(MakeHeader("Network"));
 
-        MaterialButton speedButton = new() { Text = "Measure Speed + Ping", Location = new Point(22, 70) };
+        MaterialButton speedButton = new() { Text = "Measure Speed + Ping", Location = new Point(22, 70), Width = 230 };
         speedButton.Click += async (_, _) => await RefreshNetworkStatsAsync();
+        RegisterTooltip(speedButton, "Measures throughput estimate and latency.");
 
-        MaterialButton optimize = new() { Text = "Run Network Optimization", Location = new Point(286, 70) };
+        MaterialButton optimize = new() { Text = "Repair Network Stack", Location = new Point(262, 70), Width = 230 };
         optimize.Click += async (_, _) =>
         {
             _tapCount++;
@@ -33,13 +34,15 @@ internal sealed class NetworkSectionControl : SectionControlBase
                 _tapCount = 0;
             }
         };
+        RegisterTooltip(optimize, "Runs flushdns + winsock + ip reset commands.");
 
         _stats.Location = new Point(22, 126);
         _stats.ForeColor = ThemePalette.Text;
         _stats.AutoSize = true;
 
         _output.Location = new Point(22, 164);
-        _output.Size = new Size(900, 385);
+        _output.Size = new Size(910, 500);
+        _output.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
         _output.Multiline = true;
         _output.ScrollBars = ScrollBars.Vertical;
         _output.ReadOnly = true;
